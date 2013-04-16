@@ -510,7 +510,7 @@ def decode_cli():
     c.add_argument('-m', '--message',  metavar='MESSAGE',   dest='comment', help='comment for shift')
 
     c = s.add_parser( 'mark', help='mark shifts as reported',
-        description='DATE is given as YYYY-MM-DD.'
+        description='Mark shifts so they don\'t show up by default on reports. DATE is given as YYYY-MM-DD.'
     )
     c.add_argument('-f', '--from', metavar='DATE', dest='from', help='Earliest time to start report')
     c.add_argument('-t', '--to',   metavar='DATE', dest='to',   help='Latest time to report')
