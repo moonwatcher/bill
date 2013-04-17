@@ -29,7 +29,7 @@ expression = {
     'csv datetime format':'%Y-%m-%d %H:%M',
     'date format':'%Y-%m-%d',
     'time delta':{
-        'pattern':re.compile('(?:(?P<hours>[0-9]+)h)?(?:(?P<minutes>[0-9]+)m)?(?:(?P<seconds>[0-9]+)s)?'),
+        'pattern':re.compile('(?:(?P<hours>[0-9]+)h)?(?:(?P<minutes>[0-9]+)m)?(?:(?P<seconds>[0-9]+)s)?(?P<sign>-)?'),
     },
     'epoch': datetime.utcfromtimestamp(0),
 }
@@ -462,9 +462,15 @@ def parse_time_delta(delta):
         match = expression['time delta']['pattern'].search(delta)
         if match is not None:
             o = {}
+            minus = False
             for k,v in match.groupdict().iteritems():
-                if v: o[k] = int(v)
+                if v:
+                    if k == 'sign':
+                        if v == '-': minus = True
+                    else: o[k] = int(v)
             result = timedelta(**o)
+            if minus: result = -result
+            print result
         
     return result
 
@@ -495,7 +501,7 @@ def decode_cli():
     # -- sub parsers for each action --
     s = p.add_subparsers(dest='action')
     c = s.add_parser( 'start', help='start billing',
-        description='TIMESTAMP is given as YYYY-MM-DD HH:MM:SS, DURATION is given as {H}h{M}m{S}s or any subset, i.e. 4h34m'
+        description='TIMESTAMP is given as YYYY-MM-DD HH:MM:SS, DURATION is given as {H}h{M}m{S}s{sign}? or any subset, i.e. 4h34m-'
     )
     c.add_argument('-t', '--time',     metavar='TIMESTAMP', dest='time',                   help='time to start [defualt: now]')
     c.add_argument('-o', '--offset',   metavar='DURATION',  dest='offset',   default='0s', help='offset time to start [default: %(default)s]')
@@ -503,7 +509,7 @@ def decode_cli():
     c.add_argument('-m', '--message',  metavar='MESSAGE',   dest='comment', help='comment for shift')
 
     c = s.add_parser( 'stop', help='stop billing',
-        description='TIMESTAMP is given as YYYY-MM-DD HH:MM:SS, DURATION is given as {H}h{M}m{S}s or any subset, i.e. 4h34m'
+        description='TIMESTAMP is given as YYYY-MM-DD HH:MM:SS, DURATION is given as {H}h{M}m{S}s{sign}? or any subset, i.e. 4h34m-'
     )
     c.add_argument('-t', '--time',     metavar='TIMESTAMP', dest='time',                   help='time to stop [defualt: now]')
     c.add_argument('-o', '--offset',   metavar='DURATION',  dest='offset',   default='0s', help='offset time to stop [default: %(default)s]')
