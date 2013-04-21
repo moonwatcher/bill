@@ -470,7 +470,6 @@ def parse_time_delta(delta):
                     else: o[k] = int(v)
             result = timedelta(**o)
             if minus: result = -result
-            print result
         
     return result
 
