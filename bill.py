@@ -270,7 +270,7 @@ class ProjectBill(object):
                 total['shift'] += 1
         total['minute'] = total['second'] / 3600.0
         print ''
-        print u'Total {} hours in {} shifts from {} to {}'.format(total['minute'], total['shift'], total['early'], total['late'])
+        print u'Total {} hours in {} shifts from {} to {} which are {}$'.format(total['minute'], total['shift'], total['early'], total['late'], total['minute'] * 40.0)
         
         if self.current is not None:
             self.current.report()
@@ -504,7 +504,7 @@ def decode_cli():
     )
     c.add_argument('-t', '--time',     metavar='TIMESTAMP', dest='time',                   help='time to start [defualt: now]')
     c.add_argument('-o', '--offset',   metavar='DURATION',  dest='offset',   default='0s', help='offset time to start [default: %(default)s]')
-    c.add_argument('-q', '--quantize', metavar='DURATION',  dest='quantize', default='15m', help='round to the nearest time fragment [default: %(default)s]')
+    c.add_argument('-q', '--quantize', metavar='DURATION',  dest='quantize', default='1m', help='round to the nearest time fragment [default: %(default)s]')
     c.add_argument('-m', '--message',  metavar='MESSAGE',   dest='comment', help='comment for shift')
 
     c = s.add_parser( 'stop', help='stop billing',
