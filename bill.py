@@ -317,14 +317,15 @@ class ProjectBill(object):
                     event.balance = total['balance']
             
         total['hours'] = total['duration'].total_seconds() / 3600.0
+        print u'{:<10}: {}'.format('Name', self.name)
         print u'{:<10}: {}'.format('From', total['early'])
         print u'{:<10}: {}'.format('To', total['late'])
-        print u'{:<10}: {:.2f}'.format('Hours', total['hours'])
-        print u'{:<10}: {}'.format('Shifts', total['shift'])
-        print u'{:<10}: {:.2f}'.format('Labour', total['labour'])
         print u'{:<10}: {}'.format('Payments', total['payment'])
-        print u'{:<10}: {:.2f}'.format('Deposit', total['deposit'])
-        print u'{:<10}: {:.2f}'.format('Balance', total['balance'])
+        print u'{:<10}: {}'.format('Shifts', total['shift'])
+        print u'{:<10}: {:.2f} hours'.format('Work', total['hours'])
+        print u'{:<10}: {:.2f}$'.format('Labour', total['labour'])
+        print u'{:<10}: {:.2f}$'.format('Deposit', total['deposit'])
+        print u'{:<10}: {:.2f}$'.format('Balance', total['balance'])
         
         if self.current is not None:
             self.current.report()
