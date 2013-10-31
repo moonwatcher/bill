@@ -22,8 +22,8 @@ log_levels = {
     'critical': logging.CRITICAL
 }
 expression = {
-    'csv record header':u'{:<16}, {:<16}, {:<8}, {}',
-    'csv record pattern':u'{:<16}, {:<16}, {:<8}, {}',
+    'csv record header':u'{:<9},{:<17},{:<17},{:<9},{:<9},{:<9}',
+    'csv record pattern':u'{:<9},{:<17},{:<17},{:<9},{:<10.2f},{:<10.2f}',
     'current record pattern':u'Current shift started at {:<16} and has been running for {:<16}',
     'datetime format':'%Y-%m-%dT%H:%M:%S.%f',
     'csv datetime format':'%Y-%m-%d %H:%M',
@@ -103,8 +103,7 @@ class Bill(object):
         for project in self.project.values():
             project.report(start, end)
     
-
-    def mark(self):
+    def balance(self):
         start = None
         if 'from' in self.env:
             start = datetime.strptime(self.env['from'], expression['date format'])
@@ -114,7 +113,19 @@ class Bill(object):
             end = datetime.strptime(self.env['to'], expression['date format'])
             
         for project in self.project.values():
-            project.mark(start, end)
+            project.balance(start, end)
+    
+    def pay(self):
+        amount = None
+        if 'amount' in self.env:
+            amount = self.env['amount']
+            
+        date = None
+        if 'date' in self.env:
+            date = datetime.strptime(self.env['date'], expression['date format'])
+            
+        for project in self.project.values():
+            project.pay(amount, date)
     
 
 
@@ -164,8 +175,19 @@ class ProjectBill(object):
                             self._current = Shift(self, self.node['current'])
                             
                         if 'history' in self.node:
-                            for s in self.node['history']:
-                                self._history.append(Shift(self, s))
+                            for e in self.node['history']:
+                                if e['type'] == 'shift':
+                                    self._history.append(Shift(self, e))
+                                    
+                                elif e['type'] == 'payment':
+                                    self._history.append(Payment(self, e))
+                                    
+                        # sort the history
+                        if self.env['sort']:
+                            self.volatile = True
+                            self.log.debug(u'Sorting history')
+                            self._history.sort(key=lambda event: event.order)
+            
             else: self.node = {}
     
     
@@ -177,7 +199,7 @@ class ProjectBill(object):
                 
             if self._current is not None:
                 self.node['current'] = self._current.node
-                
+            
             path = os.path.realpath(os.path.expanduser(os.path.expandvars(self.config['db'])))
             if self.varify_directory(os.path.dirname(path)):
                 self.log.debug(u'Flushing database for %s', self.name)
@@ -220,7 +242,7 @@ class ProjectBill(object):
                 self.current._start = query['time']
                 self.current._precision = query['quantize']
                 if 'comment' in self.env:
-                    self.current._comment = self.env['comment']
+                    self.current.comment = self.env['comment']
             self.log.info(u'Started a shift for project %s at %s', self.name, self.current.start)
         else:
             self.log.error(u'Project %s already has a shift running since %s. You must close it first.', self.name, self.current.start)
@@ -230,7 +252,7 @@ class ProjectBill(object):
             query = self.select()
             self.current._end = query['time']
             if 'comment' in self.env:
-                self.current._comment = self.env['comment']
+                self.current.comment = self.env['comment']
             
             self.history.append(self.current)
             current = self.current
@@ -241,45 +263,101 @@ class ProjectBill(object):
             self.log.error(u'Project %s has no running shift. You must start one first.', self.name)
     
     
+    def pay(self, amount, date):
+        payment = Payment(self, {'amount':amount})
+        if date is None:
+            payment._date = datetime.now()
+        else:
+            payment._date = date
+        
+        self.volatile = True
+        self.history.append(payment)
+    
     def report(self, start, end):
         total = {
             'duration':timedelta(),
-            'second':0,
             'shift':0,
+            'payment':0,
             'early':None,
             'late':None,
+            'labour':0.0,
+            'deposit':0.0,
+            'balance':0.0,
         }
-        print expression['csv record header'].format (
-            u'start',
-            u'end',
-            u'duration',
-            u'comment',
-        )
-        for shift in self.history:
-            if (start is None or shift.round_start > start) \
-            and (end is None or shift.round_start < end) \
-            and (self.env['marked'] or not shift.marked):
-                if total['early'] is None or shift.round_start < total['early']:
-                    total['early'] =  shift.round_start
+        for event in self.history:
+            if isinstance(event, Shift):
+                if (start is None or event.round_start > start) \
+                and (end is None or event.round_start < end):
+                    if total['early'] is None or event.round_start < total['early']:
+                        total['early'] =  event.round_start
+                        
+                    if total['late'] is None or event.round_end > total['late']:
+                        total['late'] =  event.round_end
+                        
+                    # update totals
+                    total['duration'] += event.round_duration
+                    total['shift'] += 1
+                    total['labour'] += event.value
+                    total['balance'] += event.value
+                    event.balance = total['balance']
                     
-                if total['late'] is None or shift.round_end > total['late']:
-                    total['late'] =  shift.round_end
-                shift.report()
-                total['duration'] += shift.round_duration
-                total['second'] += shift.round_duration.total_seconds()
-                total['shift'] += 1
-        total['minute'] = total['second'] / 3600.0
-        print ''
-        print u'Total {} hours in {} shifts from {} to {} which are {}$'.format(total['minute'], total['shift'], total['early'], total['late'], total['minute'] * 40.0)
+            elif isinstance(event, Payment):
+                if (start is None or event.date > start) \
+                and (end is None or event.date < end):
+                    if total['early'] is None or event.date < total['early']:
+                        total['early'] =  event.date
+                        
+                    if total['late'] is None or event.date > total['late']:
+                        total['late'] =  event.date
+                        
+                    # update totals
+                    total['payment'] += 1
+                    total['deposit'] += event.value
+                    total['balance'] -= event.value
+                    event.balance = total['balance']
+            
+        total['hours'] = total['duration'].total_seconds() / 3600.0
+        print u'{:<10}: {}'.format('From', total['early'])
+        print u'{:<10}: {}'.format('To', total['late'])
+        print u'{:<10}: {:.2f}'.format('Hours', total['hours'])
+        print u'{:<10}: {}'.format('Shifts', total['shift'])
+        print u'{:<10}: {:.2f}'.format('Labour', total['labour'])
+        print u'{:<10}: {}'.format('Payments', total['payment'])
+        print u'{:<10}: {:.2f}'.format('Deposit', total['deposit'])
+        print u'{:<10}: {:.2f}'.format('Balance', total['balance'])
         
         if self.current is not None:
             self.current.report()
-
-    def mark(self, start, end):
-        self.volatile = True
-        for shift in self.history:
-            if (start is None or shift.round_start > start) and (end is None or shift.round_start < end):
-                shift.mark()
+    
+    
+    def balance(self, start, end):
+        total = {
+            'balance':0.0,
+        }
+        print expression['csv record header'].format (
+            u'type',
+            u'start',
+            u'end',
+            u'duration',
+            u'amount',
+            u'balance',
+        )
+        for event in self.history:
+            if isinstance(event, Shift):
+                if (start is None or event.round_start > start) \
+                and (end is None or event.round_start < end):
+                    # update totals
+                    total['balance'] += event.value
+                    event.balance = total['balance']
+                    event.print_balance()
+                    
+            elif isinstance(event, Payment):
+                if (start is None or event.date > start) \
+                and (end is None or event.date < end):
+                    # update totals
+                    total['balance'] -= event.value
+                    event.balance = total['balance']
+                    event.print_balance()
     
     
     @property
@@ -298,6 +376,11 @@ class ProjectBill(object):
     
     
     @property
+    def rate(self):
+        return self.config['rate']
+    
+    
+    @property
     def env(self):
          return self.bill.env
     
@@ -308,21 +391,63 @@ class ProjectBill(object):
     
 
 
-class Shift(object):
+class Event(object):
     def __init__(self, project, node={}):
-        self.log = logging.getLogger('shift')
+        self.log = logging.getLogger('event')
         self.project = project
+        self.balance = None
         self._node = node
+    
+    @property
+    def type(self):
+        return self._node['type']
+    
+    
+    @property
+    def node(self):
+        result = {}
+        return result
+    
+    
+    @property
+    def comment(self):
+        return ('comment' in self._node and self._node['comment']) or None;
+    
+    
+    @comment.setter
+    def comment(self, value):
+        self._node['comment'] = value
+    
+    
+    @property
+    def env(self):
+         return self.project.env
+    
+    
+    @property
+    def json(self):
+         return json.dumps(self.node, ensure_ascii=False, sort_keys=True, indent=4,  default=default_json_handler).encode('utf-8')
+    
+
+
+class Shift(Event):
+    def __init__(self, project, node={}):
+        Event.__init__(self, project, node)
         self._start = None
         self._end = None
         self._precision = None
-        self._comment = None
-        self._marked = None
     
     
-    def mark(self):
-        self._marked = True
     
+    def print_balance(self):
+        print expression['csv record pattern'].format (
+            self.type,
+            datetime.strftime(self.round_start, expression['csv datetime format']),
+            datetime.strftime(self.round_end, expression['csv datetime format']),
+            unicode(self.round_duration),
+            self.value,
+            self.balance
+        )
     
     def report(self):
         if self.running:
@@ -338,7 +463,8 @@ class Shift(object):
                 datetime.strftime(self.round_start, expression['csv datetime format']),
                 datetime.strftime(self.round_end, expression['csv datetime format']),
                 unicode(self.round_duration),
-                self.comment,
+                self.value,
+                self.balance
             )
     
     @property
@@ -349,24 +475,14 @@ class Shift(object):
     @property
     def node(self):
         result = {}
+        result['type'] = 'shift'
         if self.start is not None:
             result['start'] = datetime.strftime(self.start, expression['datetime format'])
         if self.end is not None:
             result['end'] = datetime.strftime(self.end, expression['datetime format'])
         if self.precision is not None:
             result['precision'] = int(self.precision.total_seconds())
-        if self.comment is not None:
-            result['comment'] = self.comment
-        if self.marked:
-            result['marked'] = True
         return result
-    
-    
-    @property
-    def marked(self):
-        if self._marked is None and 'marked' in self._node:
-            self._marked = self._node['marked']
-        return self._marked
     
     
     @property
@@ -391,13 +507,6 @@ class Shift(object):
     
     
     @property
-    def comment(self):
-        if self._comment is None and 'comment' in self._node:
-            self._comment = self._node['comment']
-        return self._comment
-    
-    
-    @property
     def duration(self):
         if self.running:
             return datetime.now() - self.start
@@ -405,6 +514,11 @@ class Shift(object):
             return self.end - self.start
         else:
             return None
+    
+    
+    @property
+    def value(self):
+        return (float(self.round_duration.total_seconds()) / 3600) * self.project.config['rate']
     
     
     @property
@@ -432,15 +546,64 @@ class Shift(object):
         else:
             return None
     
+
+    @property
+    def order(self):
+        return self.start
+    
+
+
+class Payment(Event):
+    def __init__(self, project, node={}):
+        Event.__init__(self, project, node)
+        self._date = None
+    
     
     @property
-    def env(self):
-         return self.project.env
+    def node(self):
+        result = {}
+        result['type'] = 'payment'
+        result['amount'] = self.value
+        result['date'] = datetime.strftime(self.date, expression['datetime format'])
+        return result
+    
+    
+    def print_balance(self):
+        print expression['csv record pattern'].format (
+            self.type,
+            datetime.strftime(self.date, expression['csv datetime format']),
+            '',
+            '',
+            self.value,
+            self.balance
+        )
+    
+    
+    def report(self):
+        print expression['csv record pattern'].format (
+            datetime.strftime(self.date, expression['csv datetime format']),
+            '',
+            '',
+            self.value,
+            self.balance
+        )
     
     
     @property
-    def json(self):
-         return json.dumps(self.node, ensure_ascii=False, sort_keys=True, indent=4,  default=default_json_handler).encode('utf-8')
+    def date(self):
+        if self._date is None and 'date' in self._node:
+            self._date = datetime.strptime(self._node['date'], expression['datetime format'])
+        return self._date
+    
+    
+    @property
+    def value(self):
+        return self._node['amount']
+    
+    
+    @property
+    def order(self):
+        return self.date
     
 
 
@@ -494,6 +657,9 @@ def decode_cli():
     p.add_argument('-c', '--conf',      metavar='PATH',  dest='conf',      default='~/.bill/config.json', help='Path to configuration file [default: %(default)s]')
     p.add_argument('-p', '--project',                    dest='project',   default='wrd',                 help='project to bill')
     
+    
+    p.add_argument('-s', '--sort',                       dest='sort',      action='store_true')
+    
     # application version
     p.add_argument('--version', action='version', version='%(prog)s 0.1')
     
@@ -514,19 +680,24 @@ def decode_cli():
     c.add_argument('-o', '--offset',   metavar='DURATION',  dest='offset',   default='0s', help='offset time to stop [default: %(default)s]')
     c.add_argument('-m', '--message',  metavar='MESSAGE',   dest='comment', help='comment for shift')
 
-    c = s.add_parser( 'mark', help='mark shifts as reported',
-        description='Mark shifts so they don\'t show up by default on reports. DATE is given as YYYY-MM-DD.'
+    c = s.add_parser( 'pay', help='pay an amount',
+        description='Add a payment record. DATE is given as YYYY-MM-DD.'
     )
-    c.add_argument('-f', '--from', metavar='DATE', dest='from', help='Earliest time to start report')
-    c.add_argument('-t', '--to',   metavar='DATE', dest='to',   help='Latest time to report')
+    c.add_argument('-m', '--amount', metavar='AMOUNT', type=float, dest='amount',   help='Amount of payment')
+    c.add_argument('-d', '--date',   metavar='DATE', dest='date',   help='Date of payment')
 
     c = s.add_parser( 'report', help='report hours',
         description='DATE is given as YYYY-MM-DD.'
     )
     c.add_argument('-f', '--from', metavar='DATE', dest='from', help='Earliest time to start report')
     c.add_argument('-t', '--to',   metavar='DATE', dest='to',   help='Latest time to report')
-    c.add_argument('-m', '--marked', dest='marked', action='store_true', default=False, help='show marked shifts')
     
+    c = s.add_parser( 'balance', help='CSV balance sheet',
+        description='A CSV balance sheet. DATE is given as YYYY-MM-DD.'
+    )
+    c.add_argument('-f', '--from', metavar='DATE', dest='from', help='Earliest time to start report')
+    c.add_argument('-t', '--to',   metavar='DATE', dest='to',   help='Latest time to report')
+
     for k,v in vars(p.parse_args()).iteritems():
         if v is not None:
             env[k] = v
@@ -551,8 +722,11 @@ def main():
         if env['action'] == 'report':
             bill.report()
             
-        if env['action'] == 'mark':
-            bill.mark()
+        if env['action'] == 'balance':
+            bill.balance()
+            
+        if env['action'] == 'pay':
+            bill.pay()
     bill.unload()
 
 if __name__ == '__main__':
