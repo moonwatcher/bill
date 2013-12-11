@@ -69,28 +69,23 @@ class Bill(object):
     @property
     def valid(self):
         return self.config is not None
-    
-    
+        
     def load(self):
         for project in self.project.values():
             project.expand()
-    
-    
+            
     def unload(self):
         for project in self.project.values():
             project.collapse()
-    
-    
+            
     def start(self):
         for project in self.project.values():
             project.start()
-    
-    
+            
     def stop(self):
         for project in self.project.values():
             project.stop()
-    
-    
+            
     def report(self):
         start = None
         if 'from' in self.env:
@@ -102,7 +97,7 @@ class Bill(object):
             
         for project in self.project.values():
             project.report(start, end)
-    
+            
     def balance(self):
         start = None
         if 'from' in self.env:
@@ -114,7 +109,7 @@ class Bill(object):
             
         for project in self.project.values():
             project.balance(start, end)
-    
+            
     def pay(self):
         amount = None
         if 'amount' in self.env:
@@ -126,7 +121,7 @@ class Bill(object):
             
         for project in self.project.values():
             project.pay(amount, date)
-    
+            
 
 
 class ProjectBill(object):
@@ -138,8 +133,7 @@ class ProjectBill(object):
         self._current = None
         self._history = None
         self.volatile = False
-    
-    
+        
     def varify_directory(self, path):
         result = True
         try:
@@ -150,8 +144,7 @@ class ProjectBill(object):
             self.log.error(unicode(err))
             result = False
         return result
-    
-    
+        
     def expand(self):
         if self.config and 'db' in self.config:
             path = os.path.realpath(os.path.expanduser(os.path.expandvars(self.config['db'])))
@@ -187,10 +180,9 @@ class ProjectBill(object):
                             self.volatile = True
                             self.log.debug(u'Sorting history')
                             self._history.sort(key=lambda event: event.order)
-            
+                            
             else: self.node = {}
-    
-    
+            
     def collapse(self):
         if self.volatile:
             self.node = { 'history':[], }
@@ -199,7 +191,7 @@ class ProjectBill(object):
                 
             if self._current is not None:
                 self.node['current'] = self._current.node
-            
+                
             path = os.path.realpath(os.path.expanduser(os.path.expandvars(self.config['db'])))
             if self.varify_directory(os.path.dirname(path)):
                 self.log.debug(u'Flushing database for %s', self.name)
@@ -212,8 +204,7 @@ class ProjectBill(object):
                     self.log.debug(u'Exception raised %s', unicode(ioerr))
                 else:
                     self.volatile = False
-    
-    
+                    
     def select(self):
         query = {}
         
@@ -225,14 +216,14 @@ class ProjectBill(object):
             
         if 'quantize' in self.env:
             query['quantize'] = parse_time_delta(self.env['quantize'])
-
+            
         if 'offset' in self.env:
             offset = parse_time_delta(self.env['offset'])
             query['time'] = query['time'] + offset
             
         self.log.debug(u'query is %s', unicode(query))
         return query
-    
+        
     def start(self):
         if self.current is None:
             query = self.select()
@@ -246,14 +237,14 @@ class ProjectBill(object):
             self.log.info(u'Started a shift for project %s at %s', self.name, self.current.start)
         else:
             self.log.error(u'Project %s already has a shift running since %s. You must close it first.', self.name, self.current.start)
-    
+            
     def stop(self):
         if self.current is not None:
             query = self.select()
             self.current._end = query['time']
             if 'comment' in self.env:
                 self.current.comment = self.env['comment']
-            
+                
             self.history.append(self.current)
             current = self.current
             self._current = None
@@ -261,18 +252,17 @@ class ProjectBill(object):
             self.log.info(u'Shift duration %s from %s to %s for project %s.', current.round_duration, current.round_start, current.round_end, self.name)
         else:
             self.log.error(u'Project %s has no running shift. You must start one first.', self.name)
-    
-    
+            
     def pay(self, amount, date):
         payment = Payment(self, {'amount':amount})
         if date is None:
             payment._date = datetime.now()
         else:
             payment._date = date
-        
+            
         self.volatile = True
         self.history.append(payment)
-    
+        
     def report(self, start, end):
         total = {
             'duration':timedelta(),
@@ -315,7 +305,7 @@ class ProjectBill(object):
                     total['deposit'] += event.value
                     total['balance'] -= event.value
                     event.balance = total['balance']
-            
+                    
         total['hours'] = total['duration'].total_seconds() / 3600.0
         print u'{:<10}: {}'.format('Name', self.name)
         print u'{:<10}: {}'.format('From', total['early'])
@@ -329,8 +319,7 @@ class ProjectBill(object):
         
         if self.current is not None:
             self.current.report()
-    
-    
+            
     def balance(self, start, end):
         total = {
             'balance':0.0,
@@ -360,37 +349,31 @@ class ProjectBill(object):
                     total['balance'] -= event.value
                     event.balance = total['balance']
                     event.print_balance()
-    
-    
+                    
     @property
     def current(self):
         return self._current
-    
-    
+        
     @property
     def history(self):
         return self._history
-    
-    
+        
     @property
     def name(self):
         return self.config['name']
-    
-    
+        
     @property
     def rate(self):
         return self.config['rate']
-    
-    
+        
     @property
     def env(self):
          return self.bill.env
-    
-    
+         
     @property
     def json(self):
          return json.dumps(self.node, ensure_ascii=False, sort_keys=True, indent=4,  default=default_json_handler).encode('utf-8')
-    
+         
 
 
 class Event(object):
@@ -399,37 +382,32 @@ class Event(object):
         self.project = project
         self.balance = None
         self._node = node
-    
+        
     @property
     def type(self):
         return self._node['type']
-    
-    
+        
     @property
     def node(self):
         result = {}
         return result
-    
-    
+        
     @property
     def comment(self):
         return ('comment' in self._node and self._node['comment']) or None;
-    
-    
+        
     @comment.setter
     def comment(self, value):
         self._node['comment'] = value
-    
-    
+        
     @property
     def env(self):
          return self.project.env
-    
-    
+         
     @property
     def json(self):
          return json.dumps(self.node, ensure_ascii=False, sort_keys=True, indent=4,  default=default_json_handler).encode('utf-8')
-    
+         
 
 
 class Shift(Event):
@@ -438,9 +416,7 @@ class Shift(Event):
         self._start = None
         self._end = None
         self._precision = None
-    
-    
-    
+        
     def print_balance(self):
         print expression['csv record pattern'].format (
             self.type,
@@ -451,7 +427,7 @@ class Shift(Event):
             self.balance,
             self.comment
         )
-    
+        
     def report(self):
         if self.running:
             print ''
@@ -469,12 +445,11 @@ class Shift(Event):
                 self.value,
                 self.balance
             )
-    
+            
     @property
     def running(self):
         return self.start is not None and self.end is None
-    
-    
+        
     @property
     def node(self):
         result = {}
@@ -488,29 +463,25 @@ class Shift(Event):
         if self.comment is not None:
             result['comment'] = self.comment
         return result
-    
-    
+        
     @property
     def start(self):
         if self._start is None and 'start' in self._node:
             self._start = datetime.strptime(self._node['start'], expression['datetime format'])
         return self._start
-    
-    
+        
     @property
     def end(self):
         if self._end is None and 'end' in self._node:
             self._end = datetime.strptime(self._node['end'], expression['datetime format'])
         return self._end
         
-    
     @property
     def precision(self):
         if self._precision is None and 'precision' in self._node:
             self._precision = timedelta(seconds=self._node['precision'])
         return self._precision
-    
-    
+        
     @property
     def duration(self):
         if self.running:
@@ -519,29 +490,25 @@ class Shift(Event):
             return self.end - self.start
         else:
             return None
-    
-    
+            
     @property
     def value(self):
         return (float(self.round_duration.total_seconds()) / 3600) * self.project.config['rate']
-    
-    
+        
     @property
     def round_start(self):
         if self.start is not None and self.precision is not None:
             return round_datetime_to_timedelta(self.start, self.precision)
         else:
             return None
-    
-    
+            
     @property
     def round_end(self):
         if self.end is not None and self.precision is not None:
             return round_datetime_to_timedelta(self.end, self.precision)
         else:
             return None
-    
-    
+            
     @property
     def round_duration(self):
         if self.running:
@@ -550,20 +517,18 @@ class Shift(Event):
             return self.round_end - self.round_start
         else:
             return None
-    
-
+            
     @property
     def order(self):
         return self.start
-    
+        
 
 
 class Payment(Event):
     def __init__(self, project, node={}):
         Event.__init__(self, project, node)
         self._date = None
-    
-    
+        
     @property
     def node(self):
         result = {}
@@ -571,8 +536,7 @@ class Payment(Event):
         result['amount'] = self.value
         result['date'] = datetime.strftime(self.date, expression['datetime format'])
         return result
-    
-    
+        
     def print_balance(self):
         print expression['csv record pattern'].format (
             self.type,
@@ -583,8 +547,7 @@ class Payment(Event):
             self.balance,
             self.comment
         )
-    
-    
+        
     def report(self):
         print expression['csv record pattern'].format (
             datetime.strftime(self.date, expression['csv datetime format']),
@@ -593,24 +556,21 @@ class Payment(Event):
             self.value,
             self.balance
         )
-    
-    
+        
     @property
     def date(self):
         if self._date is None and 'date' in self._node:
             self._date = datetime.strptime(self._node['date'], expression['datetime format'])
         return self._date
-    
-    
+        
     @property
     def value(self):
         return self._node['amount']
-    
-    
+        
     @property
     def order(self):
         return self.date
-    
+        
 
 
 def default_json_handler(o):
@@ -618,7 +578,7 @@ def default_json_handler(o):
     if isinstance(o, datetime):
         result = datetime.strftime(o, expression['datetime format'])
     return result
-
+    
 def parse_time_delta(delta):
     result = None
     if delta is None:
@@ -635,24 +595,23 @@ def parse_time_delta(delta):
                     else: o[k] = int(v)
             result = timedelta(**o)
             if minus: result = -result
-        
     return result
-
+    
 def round_datetime_to_timedelta(time, quantizer):
     def datetime_to_seconds(time):
         delta = time - expression['epoch']
         return delta.total_seconds()
-    
+        
     stamp = datetime_to_seconds(time)
     quant = quantizer.total_seconds()
     result = int(stamp / quant)
     remain = stamp - result * quant
     if int(round(remain/quant)): result += 1
     return datetime.utcfromtimestamp(result * quant)
-
+    
 def decode_cli():
     env = {}
-
+    
     # -- global arguments for all actions --
     p = ArgumentParser()
     p.add_argument('-v', '--verbosity', metavar='LEVEL', dest='verbosity', default='info',                help='logging verbosity level [default: %(default)s]', choices=log_levels.keys())
@@ -674,20 +633,20 @@ def decode_cli():
     c.add_argument('-o', '--offset',   metavar='DURATION',  dest='offset',   default='0s', help='offset time to start [default: %(default)s]')
     c.add_argument('-q', '--quantize', metavar='DURATION',  dest='quantize', default='1m', help='round to the nearest time fragment [default: %(default)s]')
     c.add_argument('-m', '--message',  metavar='MESSAGE',   dest='comment', help='comment for shift')
-
+    
     c = s.add_parser( 'stop', help='stop billing',
         description='TIMESTAMP is given as YYYY-MM-DD HH:MM:SS, DURATION is given as {H}h{M}m{S}s{sign}? or any subset, i.e. 4h34m-'
     )
     c.add_argument('-t', '--time',     metavar='TIMESTAMP', dest='time',                   help='time to stop [defualt: now]')
     c.add_argument('-o', '--offset',   metavar='DURATION',  dest='offset',   default='0s', help='offset time to stop [default: %(default)s]')
     c.add_argument('-m', '--message',  metavar='MESSAGE',   dest='comment', help='comment for shift')
-
+    
     c = s.add_parser( 'pay', help='pay an amount',
         description='Add a payment record. DATE is given as YYYY-MM-DD.'
     )
     c.add_argument('-m', '--amount', metavar='AMOUNT', type=float, dest='amount',   help='Amount of payment')
     c.add_argument('-d', '--date',   metavar='DATE', dest='date',   help='Date of payment')
-
+    
     c = s.add_parser( 'report', help='report hours',
         description='DATE is given as YYYY-MM-DD.'
     )
@@ -699,13 +658,12 @@ def decode_cli():
     )
     c.add_argument('-f', '--from', metavar='DATE', dest='from', help='Earliest time to start report')
     c.add_argument('-t', '--to',   metavar='DATE', dest='to',   help='Latest time to report')
-
+    
     for k,v in vars(p.parse_args()).iteritems():
         if v is not None:
             env[k] = v
     return env
     
-
 def main():
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
@@ -730,6 +688,6 @@ def main():
         if env['action'] == 'pay':
             bill.pay()
     bill.unload()
-
+    
 if __name__ == '__main__':
     main()
