@@ -22,8 +22,8 @@ log_levels = {
     'critical': logging.CRITICAL
 }
 expression = {
-    'csv record header':u'{:<9},{:<17},{:<17},{:<9},{:<9},{:<9}',
-    'csv record pattern':u'{:<9},{:<17},{:<17},{:<9},{:<10.2f},{:<10.2f}',
+    'csv record header':u'{:<9},{:<17},{:<17},{:<9},{:<9},{:<9},{}',
+    'csv record pattern':u'{:<9},{:<17},{:<17},{:<9},{:<10.2f},{:<10.2f},{}',
     'current record pattern':u'Current shift started at {:<16} and has been running for {:<16}',
     'datetime format':'%Y-%m-%dT%H:%M:%S.%f',
     'csv datetime format':'%Y-%m-%d %H:%M',
@@ -342,6 +342,7 @@ class ProjectBill(object):
             u'duration',
             u'amount',
             u'balance',
+            u'comment',
         )
         for event in self.history:
             if isinstance(event, Shift):
@@ -447,7 +448,8 @@ class Shift(Event):
             datetime.strftime(self.round_end, expression['csv datetime format']),
             unicode(self.round_duration),
             self.value,
-            self.balance
+            self.balance,
+            self.comment
         )
     
     def report(self):
@@ -483,6 +485,8 @@ class Shift(Event):
             result['end'] = datetime.strftime(self.end, expression['datetime format'])
         if self.precision is not None:
             result['precision'] = int(self.precision.total_seconds())
+        if self.comment is not None:
+            result['comment'] = self.comment
         return result
     
     
@@ -576,7 +580,8 @@ class Payment(Event):
             '',
             '',
             self.value,
-            self.balance
+            self.balance,
+            self.comment
         )
     
     
@@ -610,12 +615,8 @@ class Payment(Event):
 
 def default_json_handler(o):
     result = None
-    from bson.objectid import ObjectId
     if isinstance(o, datetime):
         result = datetime.strftime(o, expression['datetime format'])
-    if isinstance(o, ObjectId):
-        result = str(o)
-        
     return result
 
 def parse_time_delta(delta):
