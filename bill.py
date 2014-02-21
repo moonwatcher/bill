@@ -493,7 +493,7 @@ class Shift(Event):
             
     @property
     def value(self):
-        return (float(self.round_duration.total_seconds()) / 3600) * self.project.config['rate']
+        return round((float(self.round_duration.total_seconds()) / 3600.0),2) * self.project.config['rate']
         
     @property
     def round_start(self):
