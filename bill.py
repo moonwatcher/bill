@@ -535,6 +535,8 @@ class Payment(Event):
         result['type'] = 'payment'
         result['amount'] = self.value
         result['date'] = datetime.strftime(self.date, expression['datetime format'])
+        if self.comment is not None:
+            result['comment'] = self.comment
         return result
         
     def print_balance(self):
