@@ -22,6 +22,8 @@ log_levels = {
     'critical': logging.CRITICAL
 }
 expression = {
+    'csv monthly record header':u'{:<4}, {:<5}, {:<9}, {:<10}, {:<9}',
+    'csv monthly record pattern':u'{:<4}, {:<5}, {:<9}, {:<10.2f}, {:<10.2f}',    
     'csv record header':u'{:<9},{:<17},{:<17},{:<9},{:<9},{:<9},{}',
     'csv record pattern':u'{:<9},{:<17},{:<17},{:<9},{:<10.2f},{:<10.2f},{}',
     'current record pattern':u'Current shift started at {:<16} and has been running for {:<16}',
@@ -109,6 +111,18 @@ class Bill(object):
             
         for project in self.project.values():
             project.balance(start, end)
+            
+    def monthly(self):
+        start = None
+        if 'from' in self.env:
+            start = datetime.strptime(self.env['from'], expression['date format'])
+            
+        end = None
+        if 'to' in self.env:
+            end = datetime.strptime(self.env['to'], expression['date format'])
+            
+        for project in self.project.values():
+            project.monthly(start, end)
             
     def pay(self):
         amount = None
@@ -320,6 +334,54 @@ class ProjectBill(object):
         if self.current is not None:
             self.current.report()
             
+    def monthly(self, start, end):
+        total = {
+            'balance':0.0,
+            'year':{},
+        }
+        print expression['csv monthly record header'].format (
+            u'year',
+            u'month',
+            u'duration',
+            u'amount',
+            u'balance'
+        )
+        for event in self.history:
+            if event.date:
+                if (start is None or event.date > start) and (end is None or event.date < end):
+                    if event.date.year not in total['year']:
+                        total['year'][event.date.year] = {}
+                        
+                    if event.date.month not in total['year'][event.date.year]:
+                        total['year'][event.date.year][event.date.month] = {
+                            'duration':timedelta(),
+                            'value':0.0,
+                            'balance':None
+                        }
+                        
+                    record = total['year'][event.date.year][event.date.month]
+                    
+                    if isinstance(event, Shift):
+                        # update totals
+                        total['balance'] += event.value
+                        record['duration'] += event.duration
+                        record['value'] += event.value
+                        record['balance'] = total['balance']
+                        
+                    elif isinstance(event, Payment):
+                        # update totals
+                        total['balance'] -= event.value
+                        record['balance'] = total['balance']
+        for year in total['year'].keys():
+            for month, record in total['year'][year].iteritems():
+                print expression['csv monthly record pattern'].format(
+                    year,
+                    month,
+                    round((float(record['duration'].total_seconds()) / 3600.0),2),
+                    record['value'],
+                    record['balance']
+                )
+                    
     def balance(self, start, end):
         total = {
             'balance':0.0,
@@ -393,6 +455,10 @@ class Event(object):
         return result
         
     @property
+    def date(self):
+        return None
+        
+    @property
     def comment(self):
         return ('comment' in self._node and self._node['comment']) or None;
         
@@ -463,6 +529,10 @@ class Shift(Event):
         if self.comment is not None:
             result['comment'] = self.comment
         return result
+        
+    @property
+    def date(self):
+        return self.start
         
     @property
     def start(self):
@@ -661,6 +731,12 @@ def decode_cli():
     c.add_argument('-f', '--from', metavar='DATE', dest='from', help='Earliest time to start report')
     c.add_argument('-t', '--to',   metavar='DATE', dest='to',   help='Latest time to report')
     
+    c = s.add_parser( 'monthly', help='CSV balance sheet broken by month',
+        description='A CSV balance sheet. DATE is given as YYYY-MM-DD.'
+    )
+    c.add_argument('-f', '--from', metavar='DATE', dest='from', help='Earliest time to start report')
+    c.add_argument('-t', '--to',   metavar='DATE', dest='to',   help='Latest time to report')
+    
     for k,v in vars(p.parse_args()).iteritems():
         if v is not None:
             env[k] = v
@@ -681,14 +757,18 @@ def main():
         if env['action'] == 'stop':
             bill.stop()
             
+        if env['action'] == 'pay':
+            bill.pay()
+            
         if env['action'] == 'report':
             bill.report()
             
         if env['action'] == 'balance':
             bill.balance()
             
-        if env['action'] == 'pay':
-            bill.pay()
+        if env['action'] == 'monthly':
+            bill.monthly()
+            
     bill.unload()
     
 if __name__ == '__main__':
