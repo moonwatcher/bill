@@ -80,15 +80,15 @@ class Bill(object):
         for project in self.project.values():
             project.collapse()
             
-    def start(self):
-        for project in self.project.values():
-            project.start()
+    def start(self, project):
+        if project in self.project:
+            self.project[project].start()
             
-    def stop(self):
+    def stop(self, project):
         for project in self.project.values():
-            project.stop()
+            self.project[project].stop()
             
-    def report(self):
+    def report(self, project):
         start = None
         if 'from' in self.env:
             start = datetime.strptime(self.env['from'], expression['date format'])
@@ -97,10 +97,10 @@ class Bill(object):
         if 'to' in self.env:
             end = datetime.strptime(self.env['to'], expression['date format'])
             
-        for project in self.project.values():
-            project.report(start, end)
+        if project in self.project:
+            self.project[project].report(start, end)
             
-    def balance(self):
+    def balance(self, project):
         start = None
         if 'from' in self.env:
             start = datetime.strptime(self.env['from'], expression['date format'])
@@ -109,10 +109,10 @@ class Bill(object):
         if 'to' in self.env:
             end = datetime.strptime(self.env['to'], expression['date format'])
             
-        for project in self.project.values():
-            project.balance(start, end)
+        if project in self.project:
+            self.project[project].balance(start, end)
             
-    def monthly(self):
+    def monthly(self, project):
         start = None
         if 'from' in self.env:
             start = datetime.strptime(self.env['from'], expression['date format'])
@@ -121,10 +121,10 @@ class Bill(object):
         if 'to' in self.env:
             end = datetime.strptime(self.env['to'], expression['date format'])
             
-        for project in self.project.values():
-            project.monthly(start, end)
+        if project in self.project:
+            self.project[project].monthly(start, end)
             
-    def pay(self):
+    def pay(self, project):
         amount = None
         if 'amount' in self.env:
             amount = self.env['amount']
@@ -133,8 +133,8 @@ class Bill(object):
         if 'date' in self.env:
             date = datetime.strptime(self.env['date'], expression['date format'])
             
-        for project in self.project.values():
-            project.pay(amount, date)
+        if project in self.project:
+            self.project[project].pay(amount, date)
             
 
 
@@ -689,8 +689,6 @@ def decode_cli():
     p.add_argument('-v', '--verbosity', metavar='LEVEL', dest='verbosity', default='info',                help='logging verbosity level [default: %(default)s]', choices=log_levels.keys())
     p.add_argument('-c', '--conf',      metavar='PATH',  dest='conf',      default='~/.bill/config.json', help='Path to configuration file [default: %(default)s]')
     p.add_argument('-p', '--project',                    dest='project',   default='wrd',                 help='project to bill')
-    
-    
     p.add_argument('-s', '--sort',                       dest='sort',      action='store_true')
     
     # application version
@@ -752,22 +750,22 @@ def main():
     bill.load()
     if bill.valid:
         if env['action'] == 'start':
-            bill.start()
+            bill.start(env['project'])
         
         if env['action'] == 'stop':
-            bill.stop()
+            bill.stop(env['project'])
             
         if env['action'] == 'pay':
-            bill.pay()
+            bill.pay(env['project'])
             
         if env['action'] == 'report':
-            bill.report()
+            bill.report(env['project'])
             
         if env['action'] == 'balance':
-            bill.balance()
+            bill.balance(env['project'])
             
         if env['action'] == 'monthly':
-            bill.monthly()
+            bill.monthly(env['project'])
             
     bill.unload()
     
