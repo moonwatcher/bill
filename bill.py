@@ -482,6 +482,7 @@ class Shift(Event):
         self._start = None
         self._end = None
         self._precision = None
+        self._rate = None
         
     def print_balance(self):
         print expression['csv record pattern'].format (
@@ -528,6 +529,8 @@ class Shift(Event):
             result['precision'] = int(self.precision.total_seconds())
         if self.comment is not None:
             result['comment'] = self.comment
+        if self.rate is not None:
+            result['rate'] = self.rate
         return result
         
     @property
@@ -562,8 +565,17 @@ class Shift(Event):
             return None
             
     @property
+    def rate(self):
+        if self._rate is None:
+            if 'rate' in self._node:
+                self._rate = self._node['rate']
+            else:
+                self._rate = self.project.config['rate']
+        return self._rate
+            
+    @property
     def value(self):
-        return round((float(self.round_duration.total_seconds()) / 3600.0),2) * self.project.config['rate']
+        return round((float(self.round_duration.total_seconds()) / 3600.0),2) * self.rate
         
     @property
     def round_start(self):
